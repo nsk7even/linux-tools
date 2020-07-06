@@ -3,7 +3,7 @@ Single file linux scripts.
 
 ## system-tools
 Tools for the system level for both, non-interactive and interactive usage.
-Root access required.
+Root access required. Caution!
 
 ## file-handling-tools
 Tools that work on files.
