@@ -2,14 +2,14 @@
 #set -xv
 #
 # copytux
-version="0.8.4"
+version="0.8.5"
 # (c) Nicolas Krzywinski http://www.nskComputing.de
 #
 # Created:	    2011-10 by Nicolas Krzywinski
 # Description:	Copies complete system files to configured target directories
 #
-# Last Changed:	2020-05-02
-# Change Desc:	disabled rsync --delete-excluded for system directories
+# Last Changed:	2021-06-06
+# Change Desc:	added warning and exclude of grub.cfg for runmode=update
 #
 # Known Bugs / Missing features:
 # - Ownership and permissions of root directory are not corrected, if wrong (needs to be root:root rwxr-xr-x)
@@ -74,6 +74,13 @@ scriptname=`basename "$0"`
 echo $scriptname $version
 echo "WARNING: use this command with care!"
 echo ""
+
+if [ $runmode = "update" ]
+then
+    echo "WARNING: runmode=update"
+    echo "Target system won't be bootable, if the kernel referred by grub.cfg does not exists anymore"
+    echo ""
+fi
 
 # FUNCTIONS ############################################################################################
 
@@ -148,7 +155,7 @@ sysdirargs=$args
 if [ -n "$exclude" ]
 then
 	args="$args --exclude=$exclude"
-	sysdirargs=$args
+	sysdirargs="$args --exclude=grub.cfg"
 	rootdirargs="$rootdirargs --exclude=$exclude"
 	
 	# don't do this for root and sysdirs
@@ -290,15 +297,6 @@ then
 		echo "complete."
 	else echo "No $sourcedir/root directory - skipped."
 	fi
-
-# 2017-03-07 trying to skip run as this may not needed or break the target system instead
-#	if [ -d $sourcedir/run ]
-#	then
-#		echo -n "Copying $sourcedir/run directory... "
-#		rsync $args $sourcedir/run $rootdir/
-#		echo "complete."
-#	else echo "No $sourcedir/run directory - skipped."
-#	fi
 
 	if [ -d $sourcedir/sbin ]
 	then
@@ -449,6 +447,7 @@ then
 	mount --bind /proc $rootdir/proc
 	mount --bind /dev $rootdir/dev
 	mount --bind /sys $rootdir/sys
+	mount --bind /run $rootdir/run
 
 	# Build grub config
 	if [ -n "$grubdevice" ] && [ -b $grubdevice ]
@@ -495,6 +494,7 @@ then
 	umount $rootdir/proc
 	umount $rootdir/dev
 	umount $rootdir/sys
+	umount $rootdir/run
 fi
 
 echo ""
