@@ -7,3 +7,9 @@ Root access required. Caution!
 
 ## file-handling-tools
 Tools that work on files.
+
+### fix-mp4-createdate.sh
+Fixes the EXIF fields `CreateDate`, `TrackCreateDate`, `MediaCreateDate` with
+writing the value from `DateTimeOriginal` to them, cause the latter contains the
+correct value.
+
