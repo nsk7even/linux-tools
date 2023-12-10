@@ -2,14 +2,14 @@
 #set -xv
 #
 # copytux
-version="0.8.5"
+version="0.9.1"
 # (c) Nicolas Krzywinski http://www.nskComputing.de
 #
 # Created:	    2011-10 by Nicolas Krzywinski
 # Description:	Copies complete system files to configured target directories
 #
-# Last Changed:	2021-06-06
-# Change Desc:	added warning and exclude of grub.cfg for runmode=update
+# Last Changed:	2023-12-10
+# Change Desc:	merged changes from 0.9 and 0.8.x
 #
 # Known Bugs / Missing features:
 # - Ownership and permissions of root directory are not corrected, if wrong (needs to be root:root rwxr-xr-x)
@@ -30,22 +30,22 @@ version="0.8.5"
 runmode=full
 
 # Specify the device to install grub (leave empty to skip this step)
-grubdevice=/dev/sda
+grubdevice=
 
 # Source directory
 sourcedir=/
 
 # Target directory (leave empty to use multiple target directories below)
 # Hint: the first argument to this script overrides this parameter
-targetdir=/media/nsk/tera6a_mint
+targetdir=/media/user/backupdisk
 
 # Target directories (empty parameters will be skipped)
-rootdir=/media/nsk/evo850_root				# Absolute root dir path
-bootdirpath=/media/nsk/evo850_boot			# Absolute boot dir path OR path to place the boot dir INTO
-homedirpath=/media/nsk/evo850_home			# Absolute home dir path OR path to place the home dir INTO
-usrdirpath=/media/nsk/evo850_usr			# Absolute usr dir path OR path to place the usr dir INTO
-vardirpath=/media/nsk/evo850_var			# Absolute var dir path OR path to place the var dir INTO
-srvdirpath=/media/nsk/evo850_srv			# Absolute srv dir path OR path to place the srv dir INTO
+rootdir=			# Absolute root dir path
+bootdirpath=		# Absolute boot dir path OR path to place the boot dir INTO
+homedirpath=		# Absolute home dir path OR path to place the home dir INTO
+usrdirpath=			# Absolute usr dir path OR path to place the usr dir INTO
+vardirpath=			# Absolute var dir path OR path to place the var dir INTO
+srvdirpath=			# Absolute srv dir path OR path to place the srv dir INTO
 
 # Interpret $homedirpath, $usrdirpath, $vardirpath and $srvdirpath as absolute paths
 # Otherwise the corresponding subdirectory within the paths will be used:
@@ -92,11 +92,11 @@ compare_dir_sizes ()
 	echo -n "  - Measuring $path1 ... "
 	size1=`du -shx "$path1" | cut -f1`
 	echo $size1
-	
+
 	echo -n "  - Measuring $path2 ... "
 	size2=`du -shx "$path2" | cut -f1`
 	echo $size2
-		
+
 	if [ $size1 = $size2 ]
 	then echo "[OK] Sizes of $path1 match: $size1"
 	else echo "[WARN] Sizes of $path1 does not match: $size1 != $size2!"
@@ -110,7 +110,7 @@ get_fstab_entry ()
 	devname=`mount | grep "$localmountpoint " | sed -r 's#(\s).*##'`
 	uuidkvp=`lsblk --noheadings --pairs --output UUID $devname`
 	fstype=`lsblk --noheadings --output FSTYPE $devname`
-	
+
 	if [ $targetmountpoint = "/" ]
 	then
 		params="errors=remount-ro	0	1"
@@ -127,8 +127,65 @@ get_fstab_entry ()
 			;;
 		esac
 	fi
-	
+
 	echo "$uuidkvp	$targetmountpoint	$fstype	$params"
+}
+
+report_dir()
+{
+	if [ -n "$1" ]
+		then echo "$2"
+	fi
+}
+
+report_dirs()
+{
+	if [ "$absolutepaths" = true ]
+	then
+		suffix1="for"
+		suffix2=""
+		trailingslash="/"
+	else
+		suffix1="to place "
+		suffix2="into"
+		trailingslash=
+	fi
+
+	report_dir "$bootdirpath" "* $bootdirpath as directory $suffix1 /boot $suffix2"
+	report_dir "$homedirpath" "* $homedirpath as directory $suffix1 /home $suffix2"
+	report_dir "$usrdirpath" "* $usrdirpath as directory $suffix1 /usr $suffix2"
+	report_dir "$vardirpath" "* $vardirpath as directory $suffix1 /var $suffix2"
+	report_dir "$srvdirpath" "* $srvdirpath as directory $suffix1 /srv $suffix2"
+}
+
+copy_rootdir()
+{
+    # note: this won't touch symlinks of newer systems,
+    # but will copy directories of older systems
+	if [ -d $sourcedir/$1 ]
+	then
+		echo -n "Copying $sourcedir/$1 directory... "
+		rsync $2 $sourcedir/$1 $rootdir/
+		echo "complete."
+	else echo "No $sourcedir/$1 directory - skipped."
+	fi
+}
+
+copy_partition()
+{
+	if [ -z "$1" ]
+	then
+		echo "Skipped $2"
+	else
+		echo -n "Copying partition $2 ..."
+		rsync $3 $sourcedir$2$trailingslash $1
+		echo " complete."
+	fi
+}
+
+create_rootdir()
+{
+    if [ ! -d $rootdir/$1 ]; then mkdir $rootdir/$1; fi
 }
 
 
@@ -157,7 +214,7 @@ then
 	args="$args --exclude=$exclude"
 	sysdirargs="$args --exclude=grub.cfg"
 	rootdirargs="$rootdirargs --exclude=$exclude"
-	
+
 	# don't do this for root and sysdirs
 	if [ "$sync" = true ]
 		then args="$args --delete-excluded"
@@ -171,7 +228,7 @@ then
 	then
 		sourcedir=$1
 		targetdir=$2
-		
+
 		if [ -n "$3" ]
 		then
 			runmode=$3
@@ -220,22 +277,7 @@ if [ $sourcedir = "/" ]
 	then sourcedir=
 fi
 
-if [ "$absolutepaths" = true ]
-then
-	trailingslash="/"
-	echo "* $bootdirpath as directory for /boot"
-	echo "* $homedirpath as directory for /home"
-	echo "* $usrdirpath as directory for /usr"
-	echo "* $vardirpath as directory for /var"
-	echo "* $srvdirpath as directory for /srv"
-else
-	trailingslash=
-	echo "* $bootdirpath as directory to place /boot into"
-	echo "* $homedirpath as directory to place /home into"
-	echo "* $usrdirpath as directory to place /usr into"
-	echo "* $vardirpath as directory to place /var into"
-	echo "* $srvdirpath as directory to place /srv into"
-fi
+report_dirs
 
 if [ "$unattended" != true ]
 then
@@ -254,108 +296,23 @@ then
 	rsync $rootdirargs $sourcedir/* $rootdir/
 	echo "complete."
 
-	echo -n "Copying $sourcedir/bin directory... "
-	rsync $sysdirargs $sourcedir/bin $rootdir/
-	echo "complete."
-
-	echo -n "Copying $sourcedir/etc directory... "
-	rsync $sysdirargs $sourcedir/etc $rootdir/
-	echo "complete."
-	
-	echo -n "Copying $sourcedir/lib directory... "
-	rsync $sysdirargs $sourcedir/lib $rootdir/
-	echo "complete."
-	
-	if [ -d $sourcedir/lib32 ]
-	then
-		echo -n "Copying $sourcedir/lib32 directory... "
-		rsync $sysdirargs $sourcedir/lib32 $rootdir/
-		echo "complete."
-	else echo "No $sourcedir/lib32 directory - skipped."
-	fi
-	
-	if [ -d $sourcedir/lib64 ]
-	then
-		echo -n "Copying $sourcedir/lib64 directory... "
-		rsync $sysdirargs $sourcedir/lib64 $rootdir/
-		echo "complete."
-	else echo "No $sourcedir/lib64 directory - skipped."
-	fi
-
-	if [ -d $sourcedir/opt ]
-	then
-		echo -n "Copying $sourcedir/opt directory... "
-		rsync $args $sourcedir/opt $rootdir/
-		echo "complete."
-	else echo "No $sourcedir/opt directory - skipped."
-	fi
-	
-	if [ -d $sourcedir/root ]
-	then
-		echo -n "Copying $sourcedir/root directory... "
-		rsync $args $sourcedir/root $rootdir/
-		echo "complete."
-	else echo "No $sourcedir/root directory - skipped."
-	fi
-
-	if [ -d $sourcedir/sbin ]
-	then
-		echo -n "Copying $sourcedir/sbin directory... "
-		rsync $sysdirargs $sourcedir/sbin $rootdir/
-		echo "complete."
-	else echo "No $sourcedir/sbin directory - skipped."
-	fi
-
-	if [ -d $sourcedir/selinux ]
-	then
-		echo -n "Copying $sourcedir/selinux directory... "
-		rsync $sysdirargs $sourcedir/selinux $rootdir/
-		echo "complete."
-	else echo "No $sourcedir/selinux directory - skipped."
-	fi
-
+    copy_rootdir bin "$sysdirargs"
+    copy_rootdir etc "$sysdirargs"
+    copy_rootdir lib "$sysdirargs"
+	copy_rootdir lib32 "$sysdirargs"
+	copy_rootdir lib64 "$sysdirargs"
+	copy_rootdir opt "$args"
+    copy_rootdir root "$args"
+	copy_rootdir sbin "$sysdirargs"
+    copy_rootdir selinux "$sysdirargs"
+    copy_rootdir snap "$sysdirargs"
 
 	# Copy /boot /home /usr /var /srv partitions or directories
-
-	if [ -z "$bootdirpath" ]
-	then echo "Skipped /boot"
-	else
-		echo -n "Copying /boot partition..."
-		rsync $sysdirargs $sourcedir/boot$trailingslash $bootdirpath
-		echo " complete."
-	fi
-
-	if [ -z "$homedirpath" ]
-	then echo "Skipped /home"
-	else
-		echo -n "Copying /home partition..."
-		rsync $args $sourcedir/home$trailingslash $homedirpath
-		echo " complete."
-	fi
-
-	if [ -z "$usrdirpath" ]
-	then echo "Skipped /usr"
-	else
-		echo -n "Copying /usr partition..."
-		rsync $sysdirargs $sourcedir/usr$trailingslash $usrdirpath
-		echo " complete."
-	fi
-
-	if [ -z "$vardirpath" ]
-	then echo "Skipped /var"
-	else
-		echo -n "Copying /var partition..."
-		rsync $args $sourcedir/var$trailingslash $vardirpath
-		echo " complete."
-	fi
-
-	if [ -z "$srvdirpath" ]
-	then echo "Skipped /srv"
-	else
-		echo -n "Copying /srv partition..."
-		rsync $args $sourcedir/srv$trailingslash $srvdirpath
-		echo " complete."
-	fi
+	copy_partition "$bootdirpath" "/boot" "$sysdirargs"
+	copy_partition "$homedirpath" "/home" "$args"
+	copy_partition "$usrdirpath" "/usr" "$sysdirargs"
+	copy_partition "$vardirpath" "/var" "$args"
+	copy_partition "$srvdirpath" "/srv" "$args"
 fi
 
 if [ $runmode = "full" ]
@@ -363,20 +320,20 @@ then
 	# Create empty system directories
 	echo ""
 	echo -n "Creating empty system directories..."
-	if [ ! -d $rootdir/dev ]; then mkdir $rootdir/dev; fi
-	if [ ! -d $rootdir/media ]; then mkdir $rootdir/media; fi
-	if [ ! -d $rootdir/mnt ]; then mkdir $rootdir/mnt; fi
-	if [ ! -d $rootdir/proc ]; then mkdir $rootdir/proc; fi
+	create_rootdir dev
+	create_rootdir media
+	create_rootdir mnt
+	create_rootdir proc
 	chmod u-w $rootdir/proc
-	if [ ! -d $rootdir/run ]; then mkdir $rootdir/run; fi
-	if [ ! -d $rootdir/sys ]; then mkdir $rootdir/sys; fi
-	if [ ! -d $rootdir/tmp ]; then mkdir $rootdir/tmp; fi
+	create_rootdir run
+	create_rootdir sys
+	create_rootdir tmp
 	chmod a+w,o+t $rootdir/tmp
-	if [ ! -d $rootdir/boot ]; then mkdir $rootdir/boot; touch $rootdir/boot/not-mounted; fi
-	if [ ! -d $rootdir/home ]; then mkdir $rootdir/home; touch $rootdir/home/not-mounted; fi
-	if [ ! -d $rootdir/usr ]; then mkdir $rootdir/usr; touch $rootdir/usr/not-mounted; fi
-	if [ ! -d $rootdir/var ]; then mkdir $rootdir/var; touch $rootdir/var/not-mounted; fi
-	if [ ! -d $rootdir/srv ]; then mkdir $rootdir/srv; touch $rootdir/srv/not-mounted; fi
+	create_rootdir boot; touch $rootdir/boot/not-mounted
+	create_rootdir home; touch $rootdir/home/not-mounted
+	create_rootdir usr; touch $rootdir/usr/not-mounted
+	create_rootdir var; touch $rootdir/var/not-mounted
+	create_rootdir srv; touch $rootdir/srv/not-mounted
 	echo " complete."
 
 	# Copy symlinks from root dir
@@ -440,10 +397,10 @@ then
 	# chroot
 	echo ""
 	echo "Now chroot'ing to $rootdir ..."
-	
+
 	if [ $bootdirpath != $rootdir ]; then mount --bind $bootdirpath $rootdir/boot; fi
 	if [ $usrdirpath != $rootdir ]; then mount --bind $usrdirpath $rootdir/usr; fi
-	
+
 	mount --bind /proc $rootdir/proc
 	mount --bind /dev $rootdir/dev
 	mount --bind /sys $rootdir/sys
@@ -455,7 +412,7 @@ then
 			echo -n "  grub-install: "
 			chroot $rootdir grub-install --recheck $grubdevice
 	fi
-	
+
 	echo "  update-grub:"
 	chroot $rootdir update-grub
 
@@ -470,7 +427,7 @@ then
 			echo "#" >> $fstab
 			echo "# $todayis: automatic entries by "`basename $0` >> $fstab
 			get_fstab_entry "$rootdir" "/" | tee -a $fstab
-			
+
 			if [ "$absolutepaths" = true ]
 			then
 				get_fstab_entry "$bootdirpath" "/" | tee -a $fstab
@@ -479,7 +436,7 @@ then
 				get_fstab_entry "$vardirpath" "/" | tee -a $fstab
 				get_fstab_entry "$srvdirpath" "/" | tee -a $fstab
 			fi
-			
+
 			echo ""
 			echo "#################################################################################################"
 			echo "IMPORTANT: Verify auto-generated entries in $fstab!"
