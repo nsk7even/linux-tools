@@ -2,14 +2,14 @@
 #set -xv
 #
 # copytux
-version="0.9.1"
+version="0.9.2"
 # (c) Nicolas Krzywinski http://www.nskComputing.de
 #
 # Created:	    2011-10 by Nicolas Krzywinski
 # Description:	Copies complete system files to configured target directories
 #
-# Last Changed:	2023-12-10
-# Change Desc:	merged changes from 0.9 and 0.8.x
+# Last Changed:	2024-02-03
+# Change Desc:	added chown root:root at creating root directories
 #
 # Known Bugs / Missing features:
 # - Ownership and permissions of root directory are not corrected, if wrong (needs to be root:root rwxr-xr-x)
@@ -17,7 +17,7 @@ version="0.9.1"
 # - Swap is missing in automatic fstab entries
 # - Program arguments not good implemented
 #
-# Remarks:	    Tested on Ubuntu, Linux Mint and Debian Squeeze
+# Remarks:	    Tested on Ubuntu, Linux Mint and Debian
 #				May run on other distros as well
 
 # SETTINGS ############################################################################################
@@ -185,7 +185,11 @@ copy_partition()
 
 create_rootdir()
 {
-    if [ ! -d $rootdir/$1 ]; then mkdir $rootdir/$1; fi
+    if [ ! -d $rootdir/$1 ]
+    then
+    	mkdir $rootdir/$1
+    	chown root:root $rootdir/$1
+	fi
 }
 
 
