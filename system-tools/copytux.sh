@@ -2,14 +2,14 @@
 #set -xv
 #
 # copytux
-version="0.9.2"
+version="0.9.3"
 # (c) Nicolas Krzywinski http://www.nskComputing.de
 #
 # Created:	    2011-10 by Nicolas Krzywinski
 # Description:	Copies complete system files to configured target directories
 #
-# Last Changed:	2024-02-03
-# Change Desc:	added chown root:root at creating root directories
+# Last Changed:	2024-02-08
+# Change Desc:	introduced for loops
 #
 # Known Bugs / Missing features:
 # - Ownership and permissions of root directory are not corrected, if wrong (needs to be root:root rwxr-xr-x)
@@ -300,16 +300,13 @@ then
 	rsync $rootdirargs $sourcedir/* $rootdir/
 	echo "complete."
 
-    copy_rootdir bin "$sysdirargs"
-    copy_rootdir etc "$sysdirargs"
-    copy_rootdir lib "$sysdirargs"
-	copy_rootdir lib32 "$sysdirargs"
-	copy_rootdir lib64 "$sysdirargs"
+	for d in bin etc lib lib32 lib64 sbin selinux snap
+	do
+    	copy_rootdir ${d} "$sysdirargs"
+    done
+
 	copy_rootdir opt "$args"
     copy_rootdir root "$args"
-	copy_rootdir sbin "$sysdirargs"
-    copy_rootdir selinux "$sysdirargs"
-    copy_rootdir snap "$sysdirargs"
 
 	# Copy /boot /home /usr /var /srv partitions or directories
 	copy_partition "$bootdirpath" "/boot" "$sysdirargs"
@@ -324,20 +321,18 @@ then
 	# Create empty system directories
 	echo ""
 	echo -n "Creating empty system directories..."
-	create_rootdir dev
-	create_rootdir media
-	create_rootdir mnt
-	create_rootdir proc
+
+	for d in dev media mnt proc run sys tmp
+	do
+		create_rootdir ${d}
+	done
 	chmod u-w $rootdir/proc
-	create_rootdir run
-	create_rootdir sys
-	create_rootdir tmp
 	chmod a+w,o+t $rootdir/tmp
-	create_rootdir boot; touch $rootdir/boot/not-mounted
-	create_rootdir home; touch $rootdir/home/not-mounted
-	create_rootdir usr; touch $rootdir/usr/not-mounted
-	create_rootdir var; touch $rootdir/var/not-mounted
-	create_rootdir srv; touch $rootdir/srv/not-mounted
+
+	for d in boot home usr var srv
+	do
+		create_rootdir ${d}; touch $rootdir/${d}/not-mounted
+	done
 	echo " complete."
 
 	# Copy symlinks from root dir
@@ -405,10 +400,10 @@ then
 	if [ $bootdirpath != $rootdir ]; then mount --bind $bootdirpath $rootdir/boot; fi
 	if [ $usrdirpath != $rootdir ]; then mount --bind $usrdirpath $rootdir/usr; fi
 
-	mount --bind /proc $rootdir/proc
-	mount --bind /dev $rootdir/dev
-	mount --bind /sys $rootdir/sys
-	mount --bind /run $rootdir/run
+	for d in proc dev sys run tmp
+	do
+		mount --bind /${d} $rootdir/${d}
+	done
 
 	# Build grub config
 	if [ -n "$grubdevice" ] && [ -b $grubdevice ]
@@ -434,11 +429,10 @@ then
 
 			if [ "$absolutepaths" = true ]
 			then
-				get_fstab_entry "$bootdirpath" "/" | tee -a $fstab
-				get_fstab_entry "$homedirpath" "/" | tee -a $fstab
-				get_fstab_entry "$usrdirpath" "/" | tee -a $fstab
-				get_fstab_entry "$vardirpath" "/" | tee -a $fstab
-				get_fstab_entry "$srvdirpath" "/" | tee -a $fstab
+				for p in "$bootdirpath" "$homedirpath" "$usrdirpath" "$vardirpath" "$srvdirpath"
+				do
+					get_fstab_entry "${p}" "/" | tee -a $fstab
+				done
 			fi
 
 			echo ""
@@ -452,10 +446,11 @@ then
 	# Clean up
 	if [ $bootdirpath != $rootdir ]; then umount $rootdir/boot; fi
 	if [ $usrdirpath != $rootdir ]; then umount $rootdir/usr; fi
-	umount $rootdir/proc
-	umount $rootdir/dev
-	umount $rootdir/sys
-	umount $rootdir/run
+
+	for d in proc dev sys run tmp
+	do
+		umount $rootdir/${d}
+	done
 fi
 
 echo ""
